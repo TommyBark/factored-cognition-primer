@@ -1,11 +1,19 @@
 import re
 import bs4 as bs
 import requests
+from typing import Optional
 
 
 def remove_ordinal(query: str) -> str:
     "Remove the ordinal number at the start of a query"
     return re.sub(r"^\d+\.\s", "", query)
+
+
+def get_url_from_text(text: str) -> Optional[str]:
+    search = re.search(r"https?://\S+", text)
+    if search is None:
+        return None
+    return search.group().strip('"')
 
 
 def get_body_text(url: str) -> str:

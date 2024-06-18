@@ -1,12 +1,50 @@
-from fvalues import F
-
 from ice.recipe import recipe
+from prompt import (
+    make_action_selection_prompt,
+    action_types,
+    make_sufficient_info_prompt,
+    make_final_prompt,
+)
+from action_types import Action
+from fvalues import F
 from ice.utils import map_async
-
 
 Question = str
 Answer = str
 Subs = list[tuple[Question, Answer]]
+
+
+async def select_action(question: str, context: list[str] = []) -> Action:
+    prompt = make_action_selection_prompt(question, context=context)
+    choices = tuple(str(i) for i in range(1, 4))
+    choice_probs, _ = await recipe.agent().classify(prompt=prompt, choices=choices)
+    best_choice = max(choice_probs.items(), key=lambda x: x[1])[0]
+    return action_types[int(best_choice) - 1]
+
+
+def get_reasoning_context(result, reasoning: str, action) -> str:
+    return F(
+        f""" 
+            ---
+            Used action: {action.name}
+            
+            Reasoning from the action: {reasoning}
+
+            Results of action: {result}
+
+            ---
+            """
+    )
+
+
+async def is_info_sufficient(prompt):
+    choice_probs, _ = await recipe.agent().classify(
+        prompt=prompt, choices=(" Yes", " No")
+    )
+    prob = choice_probs.get(" Yes", 0)
+    if prob > 0.95:
+        return True
+    return False
 
 
 def make_subquestion_prompt(
@@ -70,9 +108,6 @@ async def ask_subquestions(
         return subquestions, None
 
 
-recipe.main(ask_subquestions)
-
-
 def render_background(subs: Subs) -> str:
     if not subs:
         return ""
@@ -99,31 +134,54 @@ async def get_subs(question: str, depth: int, parent_questions: list[str] = []) 
         return [(question, direct_answer)]
     subanswers = await map_async(
         subquestions,
-        lambda q: answer_by_amplification(
-            question=q, depth=depth, parent_questions=parent_questions
+        lambda q: unified_answer(
+            question=q, depth=depth - 1, parent_questions=parent_questions
         ),
     )
     return list(zip(subquestions, subanswers))
 
 
-async def answer_by_amplification(
-    question: str = "What is the effect of creatine on cognition?",
-    depth: int = 3,
+async def unified_answer(
+    question: str,
+    depth: int = 2,
+    max_tool_use: int = 1,
     parent_questions: list[str] = [],
-):
+) -> str:
     if not parent_questions:
         parent_questions = [question]
     else:
         parent_questions.append(question)
 
-    subs = (
-        await get_subs(question, depth - 1, parent_questions=parent_questions)
-        if depth > 0
-        else []
+    context = []
+    for _ in range(max_tool_use):
+        action = await select_action(question, context=context)
+        if action.name == "Reasoning":
+            subquestions, direct_answer = await ask_subquestions(
+                question=question, parent_questions=parent_questions
+            )
+            if direct_answer is not None:
+                return direct_answer
+            subanswers = await map_async(
+                subquestions,
+                lambda q: unified_answer(
+                    question=q, depth=depth - 1, parent_questions=parent_questions
+                ),
+            )
+            subs = list(zip(subquestions, subanswers))
+            final_prompt = make_qa_prompt(question, subs)
+            final_answer = await recipe.agent().complete(prompt=final_prompt, stop='"')
+            return final_answer
+        else:
+            result, reasoning = await action.recipe(question=question, context=context)
+            context.append(get_reasoning_context(result, reasoning, action))
+            sufficient_prompt = make_sufficient_info_prompt(question, context)
+            if await is_info_sufficient(sufficient_prompt):
+                break
+
+    answer = await recipe.agent().complete(
+        prompt=make_final_prompt(question, context), stop='"'
     )
-    prompt = make_qa_prompt(question, subs=subs)
-    answer = await recipe.agent().complete(prompt=prompt, stop='"')
     return answer
 
 
-recipe.main(answer_by_amplification)
+recipe.main(unified_answer)

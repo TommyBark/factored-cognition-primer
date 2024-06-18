@@ -1,5 +1,5 @@
 from fvalues import F
-from typing import List
+from typing import List, Tuple
 from ice.recipe import recipe
 from prompt import render_debate_prompt
 from ice.recipes.primer.debate.utils import Debate
@@ -24,6 +24,17 @@ debate_start = Debate(
         ("Cindy", "I am not sure"),
     ]
 )
+
+
+def make_debate_prompt(question: str) -> Debate:
+    return Debate(
+        [
+            ("Question", question),
+            ("Alice", "I'm in favor."),
+            ("Bob", "I'm against."),
+            ("Cindy", "I am not sure"),
+        ]
+    )
 
 
 async def turn(debate: Debate, agent: Agent, agent_name: Name, turns_left: int):
@@ -59,16 +70,17 @@ async def judge_debate(
 
 
 async def judge_pre_and_post(
-    debate_start: Debate = debate_start,
+    question: str = "Donald Trump is evil.",
     turns: int = 3,
     agent_names: List[str] = ["Alice", "Bob", "Cindy"],
-) -> str:
+) -> Tuple[str, F]:
+    debate_start = make_debate_prompt(question)
     prompt_pre = make_judge_prompt(render_debate(debate_start))
     judge_pre = await recipe.agent().complete(prompt=prompt_pre, stop='"')
     debate = await run_debate(debate_start, turns, agent_names)
     prompt_post = make_judge_prompt(debate)
-    judge_post = await recipe.agent().complete(prompt=prompt_post, stop='"')
-    return F(
+    judge_post = await recipe.agent().complete(prompt=prompt_post)
+    return debate, F(
         f"""Pre-debate judgment: "{judge_pre} 
              
              Post-debate judgment: "{judge_post}

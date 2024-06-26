@@ -1,6 +1,6 @@
 from fvalues import F
 from typing import Optional
-from ice.recipe import recipe
+from ice.recipe import recipe  # type: ignore
 
 
 def make_verification_prompt(
@@ -25,6 +25,7 @@ Q: Is the potential answer above correct? Say "A: Yes" or "A: No".
 A:"""
     )
     return response_prefix + response_sufix
+
 
 async def verify_answer(question: str, answer: str) -> float:
     prompt = make_verification_prompt(question=question, answer=answer)

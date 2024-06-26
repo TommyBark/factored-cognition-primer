@@ -16,7 +16,7 @@ Background text: "{context}"
 Answer the following question about the background text above:
 
 Question: "{question}"
-Answer: "Let’s think step by step. 
+\n\nAssistant: "Let’s think step by step. 
 """
     ).strip()
 
@@ -28,7 +28,7 @@ def present_qa(context: str) -> str:
         Conversation: 
         "{context}"
         Given this conversation, can you answer the original question in a better, more refined, more concise way than the original answer?
-        Answer: "Let’s think step by step. 
+        \n\nAssistant: "Let’s think step by step. 
         """
     ).strip()
 
@@ -37,9 +37,9 @@ async def answer(
     context: str = DEFAULT_CONTEXT, question: str = DEFAULT_QUESTION
 ) -> str:
     prompt = make_qa_prompt(context, question)
-    answer = await recipe.agent().complete(prompt=prompt, stop='"')
+    answer = await recipe.agent().complete(prompt=prompt)
     for _ in range(3):
-        prompt = prompt + '\n Answer: "Let’s think step by step. ' + answer
+        prompt = prompt + ' \n\nAssistant: "Let’s think step by step. ' + answer
         answer = await recipe.agent().complete(prompt=present_qa(prompt), stop='"')
     return answer
 

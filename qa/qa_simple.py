@@ -8,14 +8,14 @@ def make_qa_prompt(question: str) -> str:
         f"""Answer the following question:
 
 Question: "{question}"
-Answer: "
+\n\nAssistant: "
 """
     ).strip()
 
 
 async def answer(question: str = "What is happening on 9/9/2022?"):
     prompt = make_qa_prompt(question)
-    answer = await recipe.agent().complete(prompt=prompt, stop='"')
+    answer = await recipe.agent().complete(prompt=prompt)
     return answer
 
 
